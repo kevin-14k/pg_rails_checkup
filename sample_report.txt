@@ -1,0 +1,178 @@
+==================================================================
+ pg_rails_checkup — read-only Postgres health report for Rails apps
+ Runs only SELECTs on system catalogs/statistics. No table data read.
+==================================================================
+
+## 1. Server
++------------------------------------------------------------------------------------------------------------------------------------------+---------+-----------------+-------------------------------+
+|                                                                 version                                                                  | db_size |     uptime      |          stats_since          |
++------------------------------------------------------------------------------------------------------------------------------------------+---------+-----------------+-------------------------------+
+| PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit | 67 MB   | 00:04:40.132667 | 2026-10-13 20:07:18.153845+00 |
++------------------------------------------------------------------------------------------------------------------------------------------+---------+-----------------+-------------------------------+
+(1 row)
+
+
+## 2. Key settings
++-------------------------------------+---------+------+--------------------+
+|                name                 | setting | unit |       source       |
++-------------------------------------+---------+------+--------------------+
+| autovacuum_analyze_scale_factor     | 0.1     | -    | default            |
+| autovacuum_max_workers              | 3       | -    | default            |
+| autovacuum_vacuum_scale_factor      | 0.2     | -    | default            |
+| default_statistics_target           | 100     | -    | default            |
+| effective_cache_size                | 524288  | 8kB  | default            |
+| effective_io_concurrency            | 1       | -    | default            |
+| idle_in_transaction_session_timeout | 0       | ms   | default            |
+| jit                                 | on      | -    | default            |
+| log_min_duration_statement          | -1      | ms   | default            |
+| maintenance_work_mem                | 65536   | kB   | default            |
+| max_connections                     | 100     | -    | configuration file |
+| random_page_cost                    | 4       | -    | default            |
+| shared_buffers                      | 16384   | 8kB  | configuration file |
+| statement_timeout                   | 0       | ms   | default            |
+| work_mem                            | 4096    | kB   | default            |
++-------------------------------------+---------+------+--------------------+
+(15 rows)
+
+
+## 3. Cache hit ratio (aim > 99% for OLTP)
++---------------+---------------+
+| table_hit_pct | index_hit_pct |
++---------------+---------------+
+|        100.00 |        100.00 |
++---------------+---------------+
+(1 row)
+
+
+## 4. Primary keys / sequences close to integer overflow (column or sequence type, whichever is smaller)
++-----------------------------+------------------+-------------+---------------+------------+----------+
+|          sequence           |   column_name    | column_type | sequence_type | last_value | pct_used |
++-----------------------------+------------------+-------------+---------------+------------+----------+
+| public.legacy_events_id_seq | legacy_events.id | integer     | bigint        | 2000000000 |    93.13 |
+| public.comments_id_seq      | comments.id      | integer     | integer       | 1900000000 |    88.48 |
+| public.users_id_seq         | users.id         | integer     | integer       |      20000 |     0.00 |
+| public.posts_id_seq         | posts.id         | bigint      | bigint        |     100000 |     0.00 |
++-----------------------------+------------------+-------------+---------------+------------+----------+
+(4 rows)
+
+
+## 5. Integer columns referencing bigint keys (type mismatch, overflow risk)
++------------+-------------+-------------+------------------+-----------------+
+| table_name | column_name | column_type | references_table | referenced_type |
++------------+-------------+-------------+------------------+-----------------+
+| likes      | post_id     | integer     | posts            | bigint          |
++------------+-------------+-------------+------------------+-----------------+
+(1 row)
+
+
+## 6. Foreign keys without a supporting index (slow deletes, slow joins)
++------------+---------+------------------+------------+
+| table_name | columns | references_table | table_size |
++------------+---------+------------------+------------+
+| posts      | user_id | users            | 25 MB      |
+| comments   | user_id | users            | 11 MB      |
++------------+---------+------------------+------------+
+(2 rows)
+
+
+## 7. Unused indexes since stats reset (candidates to drop, check replicas first)
++-----------------+--------------------------+------------+----------+
+|   table_name    |        index_name        | index_size | idx_scan |
++-----------------+--------------------------+------------+----------+
+| public.comments | index_comments_on_body   | 7624 kB    |        0 |
+| public.users    | index_users_on_email_dup | 1080 kB    |        0 |
+| public.likes    | index_likes_on_post_id   | 8192 bytes |        0 |
++-----------------+--------------------------+------------+----------+
+(3 rows)
+
+
+## 8. Duplicate or redundant indexes (same leading columns)
++------------+--------------------------+----------------------+---------+
+| table_name |     redundant_index      |      covered_by      | wasted  |
++------------+--------------------------+----------------------+---------+
+| users      | index_users_on_email_dup | index_users_on_email | 1080 kB |
++------------+--------------------------+----------------------+---------+
+(1 row)
+
+
+## 9. Largest tables
++---------------+------------+---------+------------+----------+
+|  table_name   |   total    |  heap   |  indexes   | est_rows |
++---------------+------------+---------+------------+----------+
+| comments      | 28 MB      | 11 MB   | 16 MB      |   200000 |
+| posts         | 27 MB      | 25 MB   | 2208 kB    |    95616 |
+| users         | 3680 kB    | 1024 kB | 2616 kB    |    20000 |
+| likes         | 16 kB      | 0 bytes | 16 kB      |        0 |
+| legacy_events | 8192 bytes | 0 bytes | 8192 bytes |        0 |
++---------------+------------+---------+------------+----------+
+(5 rows)
+
+
+## 10. Sequential scans on non-trivial tables (possible missing index)
++------------+----------+--------------+----------+----------+-----------------------+
+| table_name | seq_scan | seq_tup_read | idx_scan | est_rows | avg_rows_per_seq_scan |
++------------+----------+--------------+----------+----------+-----------------------+
+| posts      |     7514 |    718367392 |   213790 |    95616 |                 95604 |
+| comments   |     1925 |    369541152 |    13790 |   200000 |                191969 |
+| users      |        3 |            0 |   300000 |    20000 |                     0 |
++------------+----------+--------------+----------+----------+-----------------------+
+(3 rows)
+
+
+## 11. Dead tuples and vacuum lag
++------------+------------+------------+----------+-----------------+------------------+
+| table_name | n_live_tup | n_dead_tup | dead_pct | last_autovacuum | last_autoanalyze |
++------------+------------+------------+----------+-----------------+------------------+
++------------+------------+------------+----------+-----------------+------------------+
+(0 rows)
+
+
+## 12. Transaction ID wraparound headroom
++-----------+---------+------------------------+
+|  datname  | xid_age | pct_to_forced_shutdown |
++-----------+---------+------------------------+
+| postgres  |     417 |                    0.0 |
+| template1 |     417 |                    0.0 |
+| template0 |     417 |                    0.0 |
++-----------+---------+------------------------+
+(3 rows)
+
+
+## 13. Connections by state (watch idle in transaction)
++------------+-------------+------------------+
+|   state    | connections | longest_in_state |
++------------+-------------+------------------+
+| background |           5 | -                |
++------------+-------------+------------------+
+(1 row)
+
+
+## 14. Top queries by total time (needs pg_stat_statements)
++---------+-------+---------+---------+-------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| total_s | calls | mean_ms | hit_pct | rows  |                                                                              query                                                                               |
++---------+-------+---------+---------+-------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|    80.7 |  7512 |   10.75 |   100.0 | 35599 | SELECT id, title, created_at FROM posts WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2                                                                     |
+|    33.7 |  1727 |   19.52 |   100.0 |  1727 | SELECT count(*) FROM comments WHERE user_id = $1                                                                                                                 |
+|    19.3 |   194 |   99.30 |   100.0 |  3880 | SELECT id, post_id FROM comments WHERE body ILIKE $1 LIMIT $2                                                                                                    |
+|     0.2 |  9406 |    0.02 |   100.0 |  9004 | SELECT id, title, body FROM posts WHERE id = $1                                                                                                                  |
+|     0.2 |  9406 |    0.02 |   100.0 | 18628 | SELECT id, user_id, body FROM comments WHERE post_id = $1 ORDER BY id LIMIT $2                                                                                   |
+|     0.0 |     1 |    0.89 |   100.0 |    15 | SELECT name, setting, unit, source FROM pg_settings WHERE name IN ($1,$2,$3,$4, $5,$6,$7, $8,$9, $10,$11,$12, $13,$14,$15) ORDER BY name                         |
+|     0.0 |     1 |    0.77 |       - |     1 | SELECT pg_stat_statements_reset()                                                                                                                                |
+|     0.0 |     1 |    0.72 |   100.0 |     1 | SELECT version() AS version, pg_size_pretty(pg_database_size(current_database())) AS db_size, now() - pg_postmaster_start_time() AS uptime, (SELECT stats_reset  |
+|     0.0 |     1 |    0.56 |   100.0 |     5 | SELECT c.oid::regclass AS table_name, pg_size_pretty(pg_total_relation_size(c.oid)) AS total, pg_size_pretty(pg_relation_size(c.oid)) AS heap, pg_size_pretty(pg |
+|     0.0 |     1 |    0.34 |   100.0 |     4 | SELECT s.schemaname || $1 || s.sequencename AS sequence, coalesce(d.refobjid::regclass::text || $2 || a.attname, $3) AS column_name, coalesce(format_type(a.attt |
+|     0.0 |     1 |    0.27 |   100.0 |     3 | SELECT s.schemaname || $1 || s.relname AS table_name, s.indexrelname AS index_name, pg_size_pretty(pg_relation_size(s.indexrelid)) AS index_size, s.idx_scan FRO |
+|     0.0 |     1 |    0.26 |   100.0 |     3 | SELECT t.relname AS table_name, t.seq_scan, t.seq_tup_read, t.idx_scan, greatest(t.n_live_tup, c.reltuples::bigint) AS est_rows, round(t.seq_tup_read::numeric / |
+|     0.0 |     1 |    0.24 |   100.0 |     2 | SELECT c.conrelid::regclass AS table_name, string_agg(a.attname, $1 ORDER BY x.n) AS columns, c.confrelid::regclass AS references_table, pg_size_pretty(pg_relat |
+|     0.0 |     1 |    0.22 |   100.0 |     1 | SELECT round($1 * sum(heap_blks_hit) / nullif(sum(heap_blks_hit) + sum(heap_blks_read), $2), $3) AS table_hit_pct, round($4 * sum(idx_blks_hit) / nullif(sum(idx |
+|     0.0 |     1 |    0.15 |   100.0 |     1 | SELECT a.indrelid::regclass AS table_name, a.indexrelid::regclass AS redundant_index, b.indexrelid::regclass AS covered_by, pg_size_pretty(pg_relation_size(a.in |
+|     0.0 |     1 |    0.10 |   100.0 |     0 | SELECT relname AS table_name, n_live_tup, n_dead_tup, round($1 * n_dead_tup / nullif(n_live_tup + n_dead_tup, $2), $3) AS dead_pct, last_autovacuum, last_autoan |
+|     0.0 |     1 |    0.08 |   100.0 |     1 | SELECT c.conrelid::regclass AS table_name, a.attname AS column_name, format_type(a.atttypid, a.atttypmod) AS column_type, c.confrelid::regclass AS references_ta |
+|     0.0 |     1 |    0.06 |       - |     1 | SELECT coalesce(state, $1) AS state, count(*) AS connections, max(now() - state_change) AS longest_in_state FROM pg_stat_activity WHERE pid <> pg_backend_pid()  |
+|     0.0 |     1 |    0.02 |   100.0 |     3 | SELECT datname, age(datfrozenxid) AS xid_age, round($1 * age(datfrozenxid) / $2, $3) AS pct_to_forced_shutdown FROM pg_database ORDER BY age(datfrozenxid) DESC  |
+|     0.0 |     1 |    0.01 |   100.0 |     1 | SELECT (rolsuper OR pg_has_role(current_user, $1, $2)) AS can_read_all_stats FROM pg_roles WHERE rolname = current_user                                          |
++---------+-------+---------+---------+-------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+(20 rows)
+
+
+== end of report ==

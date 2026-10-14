@@ -1,0 +1,39 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["13", "14", "15", "16", "17", "18"]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable pg_stat_statements
+        run: |
+          psql -c "ALTER SYSTEM SET shared_preload_libraries = 'pg_stat_statements'"
+          docker restart ${{ job.services.postgres.id }}
+          until pg_isready; do sleep 1; done
+      - name: Run checkup against fixture
+        run: test/run.sh

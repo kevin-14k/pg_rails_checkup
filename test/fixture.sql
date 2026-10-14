@@ -1,0 +1,23 @@
+SET client_min_messages = warning;
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+DROP TABLE IF EXISTS legacy_events, likes, comments, posts, users CASCADE;
+CREATE TABLE users (id serial PRIMARY KEY, email text NOT NULL, created_at timestamp NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX index_users_on_email ON users (email);
+CREATE INDEX index_users_on_email_dup ON users (email);
+CREATE TABLE posts (id bigserial PRIMARY KEY, user_id integer NOT NULL REFERENCES users(id), title text, body text, created_at timestamp NOT NULL DEFAULT now());
+CREATE TABLE comments (id serial PRIMARY KEY, post_id bigint NOT NULL REFERENCES posts(id), user_id integer REFERENCES users(id), body text);
+CREATE INDEX index_comments_on_post_id ON comments (post_id);
+CREATE INDEX index_comments_on_body ON comments (body);
+INSERT INTO users (email) SELECT 'u' || g || '@x.io' FROM generate_series(1, 20000) g;
+INSERT INTO posts (user_id, title, body) SELECT (random()*19999+1)::int, 't' || g, repeat('b', 200) FROM generate_series(1, 100000) g;
+INSERT INTO comments (post_id, user_id, body) SELECT (random()*99999+1)::int, (random()*19999+1)::int, 'c' || g FROM generate_series(1, 200000) g;
+SELECT setval('comments_id_seq', 1900000000);
+DELETE FROM posts WHERE id % 3 = 0 AND NOT EXISTS (SELECT 1 FROM comments c WHERE c.post_id = posts.id);
+
+CREATE TABLE likes (id serial PRIMARY KEY, post_id integer REFERENCES posts(id));
+CREATE INDEX index_likes_on_post_id ON likes (post_id);
+CREATE TABLE legacy_events (id integer PRIMARY KEY);
+CREATE SEQUENCE legacy_events_id_seq AS bigint OWNED BY legacy_events.id;
+ALTER TABLE legacy_events ALTER COLUMN id SET DEFAULT nextval('legacy_events_id_seq');
+SELECT setval('legacy_events_id_seq', 2000000000);
+ANALYZE;
