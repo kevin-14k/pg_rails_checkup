@@ -1,5 +1,7 @@
 # pg_rails_checkup
 
+[![test](https://github.com/kevin-14k/pg_rails_checkup/actions/workflows/test.yml/badge.svg)](https://github.com/kevin-14k/pg_rails_checkup/actions/workflows/test.yml)
+
 A single read-only SQL script that gives you a health report of the Postgres database behind your Rails app in under a minute.
 
 It only runs `SELECT`s on Postgres system catalogs and statistics views. It never reads your table data and changes nothing.
@@ -55,9 +57,9 @@ I'm Kevin Fraissine, a senior Rails / Postgres / infrastructure engineer based i
 
 See [SAMPLE_REVIEW.md](SAMPLE_REVIEW.md) for a complete example, written against the test database in this repo.
 
-Fixed price: **390 € excl. VAT**. No access to your servers needed. If the report shows nothing worth fixing, I'll tell you so and you don't pay.
+Fixed price: **390 €**, no VAT added. No access to your servers needed. If the report shows nothing worth fixing, I'll tell you so and you don't pay.
 
-Contact: "k.fraissine@gmail.com"
+Contact: k.fraissine@gmail.com, subject "pg_rails_checkup review". Attach `report.txt` and `db/schema.rb`, or just ask a question first.
 
 ## License
 
