@@ -45,22 +45,3 @@ bin/rails dbconsole -p < pg_rails_checkup.sql > report.txt
 Run it against production (or a replica) after the app has been up for a while: the statistics are what make the report useful. Tested on Postgres 13, 14, 15, 16, 17 and 18. Run it as the app's own database user (or a role with `pg_read_all_stats`) so the query and connection sections are complete. The script never fails silently: it warns when the role can't read some sequences (so an id near overflow could be hidden), when it can't see other roles' queries, when `pg_stat_statements` is installed but not loaded, and it adapts to old `pg_stat_statements` versions and to the extension living outside `public`. Each of these cases has a test in `test/run.sh`.
 
 Section 14 shows normalized query text (literal values replaced by `$1`, `$2`). Skim the report before sharing it anyway.
-
-## Want an expert to read it?
-
-I'm Kevin Fraissine, a senior Rails / Postgres / infrastructure engineer based in Paris. If you send me your `report.txt` and your `db/schema.rb`, I'll send back within 5 business days:
-
-- a prioritized list of what to fix, ranked by impact and risk
-- ready-to-merge Rails migrations for the index and type fixes (with `algorithm: :concurrently` where it matters)
-- the specific settings I would change for your instance size and workload
-- notes on the 5 heaviest queries and how to make them cheaper
-
-See [SAMPLE_REVIEW.md](SAMPLE_REVIEW.md) for a complete example, written against the test database in this repo.
-
-Fixed price: **390 €**, no VAT added. No access to your servers needed. If the report shows nothing worth fixing, I'll tell you so and you don't pay.
-
-Contact: k.fraissine@gmail.com, subject "pg_rails_checkup review". Attach `report.txt` and `db/schema.rb`, or just ask a question first.
-
-## License
-
-MIT
